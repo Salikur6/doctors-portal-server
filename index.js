@@ -1,9 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 require("dotenv").config();
+const jwt = require('jsonwebtoken');
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const app = express();
 const port = process.env.PORT || 5000;
+
 
 app.use(cors());
 app.use(express.json());
@@ -17,6 +19,26 @@ console.log(uri)
 const client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true, serverApi: ServerApiVersion.v1 });
 
 
+
+const verifyJWT = (req, res, next) => {
+    const authorization = req.headers.authorization;
+    console.log(authorization);
+
+    if (!authorization) {
+        return res.status(401).send({ message: 'UnAuthorized Access' })
+    }
+    const token = authorization.split(" ")[1];
+    jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, function (err, decoded) {
+        if (err) {
+            return res.status(403).send({ message: 'Forbidden Access' })
+        }
+        req.decoded = decoded;
+    })
+
+    next();
+}
+
+
 async function run() {
     try {
         await client.connect();
@@ -27,7 +49,7 @@ async function run() {
         const doctorsPortal = client.db('Doctors_portal').collection('services');
 
         const bookingCollection = client.db('Doctors_portal').collection('bookings');
-
+        const userCollection = client.db('Doctors_portal').collection('user');
 
         app.get('/service', async (req, res) => {
             const query = {}
@@ -56,6 +78,40 @@ async function run() {
             })
             res.send(services);
         })
+
+
+        app.get('/booking', verifyJWT, async (req, res) => {
+            const patientEmail = req.query.patientEmail;
+            const decodedEmail = req.decoded;
+            console.log(decodedEmail);
+            if (patientEmail === decodedEmail.email) {
+                const query = { email: patientEmail };
+                const result = await bookingCollection.find(query).toArray();
+                return res.send(result);
+            } else {
+                return res.status(403).send({ message: 'Forbidden Access' })
+            }
+
+
+        })
+
+
+        app.put('/user/:email', async (req, res) => {
+            const email = req.params.email;
+            const body = req.body;
+            const filter = { email: email };
+
+            const options = { upsert: true };
+            const updateDoc = {
+                $set: body,
+            };
+
+            const result = await userCollection.updateOne(filter, updateDoc, options);
+
+            const token = jwt.sign({ email: email }, process.env.ACCESS_TOKEN_SECRET)
+            console.log(token)
+            res.send({ result, token })
+        });
 
 
 
