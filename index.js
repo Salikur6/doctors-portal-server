@@ -64,7 +64,8 @@ async function run() {
             const services = await doctorsPortal.find().toArray();
 
             const query = { bookingDate: date };
-            // console.log(date)
+
+
             const bookings = await bookingCollection.find(query).toArray();
 
             services.forEach(service => {
